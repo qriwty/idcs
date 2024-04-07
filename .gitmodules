@@ -1,0 +1,6 @@
+[submodule "mavlink"]
+	path = mavlink
+	url = https://github.com/qriwty/mavlink.git
+[submodule "deep_sort"]
+	path = deep_sort
+	url = https://github.com/qriwty/deep_sort.git

@@ -1,51 +1,76 @@
 import socket
-import struct
-import numpy as np
+import json
+import time
 
 
-class VideoStreamClient:
-    def __init__(self, host, port, channels=3, data_type=np.uint8):
+class StreamReceiver:
+    def __init__(self, host, port, max_retries=5, retry_delay=5):
         self.host = host
         self.port = port
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.client_socket = None
+        self.connect()
 
-        self.channels = channels
-        self.data_type = data_type
+    def connect(self):
+        """Create and connect the client socket to the server with retries."""
+        attempts = 0
+        while attempts < self.max_retries:
+            try:
+                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.client_socket.connect((self.host, self.port))
+                print("Connected to server at {}:{}".format(self.host, self.port))
+                return
+            except socket.error as e:
+                print("Failed to connect to {}:{}. Reason: {}. Retrying in {} seconds...".format(
+                    self.host, self.port, e, self.retry_delay))
+                attempts += 1
+                time.sleep(self.retry_delay)
+                if self.client_socket:
+                    self.client_socket.close()
+                    self.client_socket = None
 
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.connect((host, port))
+        raise ConnectionError("Failed to connect after {} attempts".format(self.max_retries))
 
-        self.video_frames_generator = self._receive_video_frames()
-
-    def _read_exact_bytes(self, num_bytes):
-        data = b''
-
-        while len(data) < num_bytes:
-            chunk = self.client_socket.recv(num_bytes - len(data))
-
-            if not chunk:
-                raise ConnectionError()
-
-            data += chunk
-
-        return data
-
-    def _receive_video_frames(self):
+    def receive_data(self):
+        """Receive data from the server and yield complete JSON objects."""
+        buffer = ""
         while True:
-            size_data = self.client_socket.recv(4)
+            try:
+                data = self.client_socket.recv(1024).decode('utf-8')
+                if not data:
+                    # No more data received, attempt to reconnect
+                    print("Connection lost. Attempting to reconnect...")
+                    self.connect()
+                    continue
 
-            if not size_data:
-                break
+                buffer += data
 
-            width, height = struct.unpack('HH', size_data)
+                while "\n" in buffer:
+                    json_object, _, buffer = buffer.partition("\n")
+                    if json_object:
+                        try:
+                            json_data = json.loads(json_object)
+                            yield json_data
+                        except json.JSONDecodeError:
+                            continue
 
-            bytes_per_pixel = self.data_type().nbytes
-            img_data_size = width * height * self.channels * bytes_per_pixel
+            except socket.error as e:
+                print("Socket error during data reception:", e)
+                print("Attempting to reconnect...")
 
-            img_data = self._read_exact_bytes(img_data_size)
+                self.connect()
 
-            img = np.frombuffer(img_data, dtype=self.data_type).reshape((height, width, self.channels))
+    def disconnect(self):
+        """Disconnect the client socket."""
+        if self.client_socket:
+            self.client_socket.close()
+            self.client_socket = None
+            print("Disconnected from server.")
 
-            yield img
+    def get_data(self):
+        return next(self)
 
-    def current_frame(self):
-        return next(self.video_frames_generator)
+    def __iter__(self):
+        """Allow the StreamReceiver to be an iterable."""
+        return self.receive_data()

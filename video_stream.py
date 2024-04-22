@@ -69,7 +69,7 @@ class StreamReceiver:
             print("Disconnected from server.")
 
     def get_data(self):
-        return next(self)
+        return next(self.receive_data())
 
     def __iter__(self):
         """Allow the StreamReceiver to be an iterable."""

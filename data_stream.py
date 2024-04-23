@@ -4,11 +4,12 @@ import time
 
 
 class StreamReceiver:
-    def __init__(self, host, port, max_retries=5, retry_delay=5):
+    def __init__(self, host, port, max_retries=5, retry_delay=5, timeout_delay=3):
         self.host = host
         self.port = port
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.timeout_delay = timeout_delay
         self.client_socket = None
         self.connect()
 
@@ -19,9 +20,10 @@ class StreamReceiver:
             try:
                 self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.client_socket.connect((self.host, self.port))
+                self.client_socket.settimeout(1)
                 print("Connected to server at {}:{}".format(self.host, self.port))
                 return
-            except socket.error as e:
+            except (socket.error, socket.timeout) as e:
                 print("Failed to connect to {}:{}. Reason: {}. Retrying in {} seconds...".format(
                     self.host, self.port, e, self.retry_delay))
                 attempts += 1
@@ -32,10 +34,20 @@ class StreamReceiver:
 
         raise ConnectionError("Failed to connect after {} attempts".format(self.max_retries))
 
+    def request_data(self):
+        """Send a request for data to the server."""
+        try:
+            # Sending request to server
+            self.client_socket.sendall(b'request_data')
+        except (socket.error, socket.timeout) as e:
+            print("Failed to send data request to server:", e)
+            self.connect()
+
     def receive_data(self):
         """Receive data from the server and yield complete JSON objects."""
         buffer = ""
         while True:
+            self.request_data()
             try:
                 data = self.client_socket.recv(1024).decode('utf-8')
                 if not data:
@@ -55,7 +67,7 @@ class StreamReceiver:
                         except json.JSONDecodeError:
                             continue
 
-            except socket.error as e:
+            except (socket.error, socket.timeout) as e:
                 print("Socket error during data reception:", e)
                 print("Attempting to reconnect...")
 

@@ -1,4 +1,4 @@
-from video_stream import StreamReceiver
+from data_stream import StreamReceiver
 
 from simulation.webots.controllers.ardupilot_vehicle_controller.drone_data import RangefinderData, CameraData, FDMData, GimbalAxisData, GimbalData, DroneData
 import cv2
@@ -11,12 +11,12 @@ stream_receiver = StreamReceiver(host, port)
 
 frame_count = 0
 for data in stream_receiver:
-    print("Data received", data)
+    # print("Data received", data)
     if "camera" in data:
         camera = CameraData.from_dict(data["camera"])
         frame = camera.frame
         if frame is not None:
-            print(f"Displaying frame {frame_count}")
+            # print(f"Displaying frame {frame_count}")
             cv2.imshow("Frame", frame)
             frame_count += 1
         else:

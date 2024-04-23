@@ -1,88 +1,51 @@
-import socket
-import json
-import time
+import zmq
 
 
 class StreamReceiver:
-    def __init__(self, host, port, max_retries=5, retry_delay=5, timeout_delay=3):
+    def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-        self.timeout_delay = timeout_delay
-        self.client_socket = None
+
+        self.context = zmq.Context()
+        self.socket = None
+
         self.connect()
 
     def connect(self):
-        """Create and connect the client socket to the server with retries."""
-        attempts = 0
-        while attempts < self.max_retries:
-            try:
-                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.client_socket.connect((self.host, self.port))
-                self.client_socket.settimeout(1)
-                print("Connected to server at {}:{}".format(self.host, self.port))
-                return
-            except (socket.error, socket.timeout) as e:
-                print("Failed to connect to {}:{}. Reason: {}. Retrying in {} seconds...".format(
-                    self.host, self.port, e, self.retry_delay))
-                attempts += 1
-                time.sleep(self.retry_delay)
-                if self.client_socket:
-                    self.client_socket.close()
-                    self.client_socket = None
-
-        raise ConnectionError("Failed to connect after {} attempts".format(self.max_retries))
+        try:
+            self.socket = self.context.socket(zmq.REQ)
+            self.socket.connect(f"tcp://{self.host}:{self.port}")
+        except Exception as error:
+            print(f"Failed to connect to the server: {error}")
 
     def request_data(self):
-        """Send a request for data to the server."""
         try:
-            # Sending request to server
-            self.client_socket.sendall(b'request_data')
-        except (socket.error, socket.timeout) as e:
-            print("Failed to send data request to server:", e)
-            self.connect()
+            self.socket.send_string("get_data")
+        except Exception as error:
+            print(f"Failed to send data request: {error}")
 
     def receive_data(self):
-        """Receive data from the server and yield complete JSON objects."""
-        buffer = ""
-        while True:
-            self.request_data()
-            try:
-                data = self.client_socket.recv(1024).decode('utf-8')
-                if not data:
-                    # No more data received, attempt to reconnect
-                    print("Connection lost. Attempting to reconnect...")
-                    self.connect()
-                    continue
-
-                buffer += data
-
-                while "\n" in buffer:
-                    json_object, _, buffer = buffer.partition("\n")
-                    if json_object:
-                        try:
-                            json_data = json.loads(json_object)
-                            yield json_data
-                        except json.JSONDecodeError:
-                            continue
-
-            except (socket.error, socket.timeout) as e:
-                print("Socket error during data reception:", e)
-                print("Attempting to reconnect...")
-
-                self.connect()
-
-    def disconnect(self):
-        """Disconnect the client socket."""
-        if self.client_socket:
-            self.client_socket.close()
-            self.client_socket = None
-            print("Disconnected from server.")
+        try:
+            data = self.socket.recv_json()
+            return data
+        except Exception as error:
+            print(f"Failed to receive data: {error}")
 
     def get_data(self):
-        return next(self.receive_data())
+        self.request_data()
 
-    def __iter__(self):
-        """Allow the StreamReceiver to be an iterable."""
         return self.receive_data()
+
+    def close(self):
+        if self.socket:
+            self.socket.close()
+            print("Socket closed")
+        if self.context:
+            self.context.term()
+            print("ZeroMQ context terminated")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()

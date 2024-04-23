@@ -1,10 +1,9 @@
 from tqdm import tqdm
 
-from video_stream import StreamReceiver
+from data_stream import StreamReceiver
+from simulation.webots.controllers.ardupilot_vehicle_controller.drone_data import DroneData
 
-from simulation.webots.controllers.ardupilot_vehicle_controller.drone_data import RangefinderData, CameraData, FDMData, GimbalAxisData, GimbalData, DroneData
 import cv2
-import numpy as np
 from ultralytics import YOLO
 import random
 from deep_sort.deep_sort.tracker import Tracker
@@ -17,7 +16,7 @@ host = "192.168.0.107"
 port = 5588
 stream_receiver = StreamReceiver(host, port)
 
-model = YOLO("yolov8l.pt")
+model = YOLO("yolov8n.pt")
 
 detection_threshold = 0.01
 
@@ -41,7 +40,7 @@ colors = [(
 video_out_path = "out_running.mp4"
 
 data = stream_receiver.get_data()
-camera = CameraData.from_dict(data["camera"])
+camera = DroneData.from_json(data).camera
 
 
 cap_out = cv2.VideoWriter(
@@ -59,8 +58,10 @@ count = 0
 
 while count < frame_count:
     data = stream_receiver.get_data()
-    camera_frame = CameraData.from_dict(data["camera"]).frame
-    depth_frame = RangefinderData.from_dict(data["rangefinder"]).frame
+
+    drone_data = DroneData.from_json(data)
+
+    camera_frame = drone_data.camera.frame
 
     frame = camera_frame
 
@@ -111,8 +112,6 @@ while count < frame_count:
         )
 
     cv2.imshow("camera_frame", print_frame)
-
-    cv2.imshow("depth_frame", depth_frame)
 
     count += 1
 

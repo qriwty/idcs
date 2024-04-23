@@ -10,19 +10,15 @@ stream_receiver = StreamReceiver(host, port)
 
 
 frame_count = 0
-for data in stream_receiver:
-    # print("Data received", data)
-    if "camera" in data:
-        camera = CameraData.from_dict(data["camera"])
-        frame = camera.frame
-        if frame is not None:
-            # print(f"Displaying frame {frame_count}")
-            cv2.imshow("Frame", frame)
-            frame_count += 1
-        else:
-            print("Frame is None, skipping...")
-    else:
-        print("No 'camera' key in data")
+while True:
+    data = stream_receiver.get_data()
+    drone_data = DroneData.from_json(data)
+    camera_frame = drone_data.camera.frame
+
+    print(f"Frame received: {frame_count}")
+
+    cv2.imshow("Frame", camera_frame)
+    frame_count += 1
 
     key = cv2.waitKey(25)
     if key & 0xFF == ord("q"):

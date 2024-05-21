@@ -97,7 +97,7 @@ def calculate_direction_vector(view_angles, detection_offset):
 
 
 def find_target_location(drone_position, direction_vector, geospatial):
-    step_size = 1
+    step_size = 0.1
     max_distance = 1000
 
     lat_step = step_size / 111320
